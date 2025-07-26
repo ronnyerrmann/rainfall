@@ -1,11 +1,17 @@
 Downloads the metoffice rainfall radar images, summarises them daily, and creates time laps videas for selected areas
 
-### Requirements
+### Installation/Requirements
 ```
+git clone https://github.com/ronnyerrmann/rainfall
+cd rainfall
 python -m venv rain_venv
 . rain_venv/bin/activate
-pip install Image requests
-pip install opencv-python
+pip install Image requests opencv-python
+```
+
+Add crontab to run automatically every 8 hours:
+```
+1 */8 * * * /home/<user>/rainfall/rain_venv/bin/python /home/<user>/rainfall/rainfall_images.py 
 ```
 
 ### Run
@@ -17,7 +23,7 @@ All data will be stored in the folder of the script.
 As data only a few days back is available, the script should be run at least every 24 hours. For courtesy, do not run it more then once per hour.
 
 ### Description
-For the daily images the same scale as [metoffice uses in their rainfall radar](https://weather.metoffice.gov.uk/maps-and-charts/rainfall-radar-forecast-map#?model=ukmo-ukv&layer=rainfall-rate) is used, but instead of indicating mm/h it's mm/day. Additionally purple for 64 to 128 and white for 128 to 999 where added. If more than that value is reached, black will be shown and you should build am arch.
+For the daily images the same scale as [metoffice uses in their rainfall radar](https://weather.metoffice.gov.uk/maps-and-charts/rainfall-radar-forecast-map#?model=ukmo-ukv&layer=rainfall-rate) is used, but instead of indicating mm/h it's mm/day. Additionally purple for 64 to 128 and white for 128 to 999 mm/day where added. If more than that value is reached, black will be shown and you should build am arch.
 
 ### Add your own areas
 This can be done either by creating a file `subareas.csv` in the script folder, with comma-separated values for
@@ -28,4 +34,5 @@ This can be done either by creating a file `subareas.csv` in the script folder, 
 5. semi-size of the box around the selected pixel, e.g. 1 leads to a 3x3 array, 10 to 21x21
 6. scale of a pixel in the final image, e.g. a scale of 5 on a 3x3 array leads to a 15x15 png
 7. name of the place
+
 Alternatively, the script can be edited to add the lines containing `SUBAREAS.append` with the same entries (name needs to be in quotes)
