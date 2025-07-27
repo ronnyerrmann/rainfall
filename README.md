@@ -1,4 +1,4 @@
-Downloads the metoffice rainfall radar images, summarises them daily, and creates time laps videas for selected areas
+Downloads the metoffice rainfall radar images, summarises them daily, and creates time laps videos for selected areas
 
 ### Installation/Requirements
 ```
@@ -24,6 +24,8 @@ As data only a few days back is available, the script should be run at least eve
 
 ### Description
 For the daily images the same scale as [metoffice uses in their rainfall radar](https://weather.metoffice.gov.uk/maps-and-charts/rainfall-radar-forecast-map#?model=ukmo-ukv&layer=rainfall-rate) is used, but instead of indicating mm/h it's mm/day. Additionally purple for 64 to 128 and white for 128 to 999 mm/day where added. If more than that value is reached, black will be shown and you should build am arch.
+
+As the publicly available data only provides ranges from `x` to `2x` mm/h (with `x` being the lower rainfall limit for a colour), the resulting summaries for the day can be off by a similar amount. The program uses the value at 33% of the range to reflect the assumed Poisson distribution of rainfall and that the rainfall measurement is done at discrete times. The final values, given in the grey scaled image, have therefore a relative uncertainty of [+50% -25%].
 
 ### Add your own areas
 This can be done either by creating a file `subareas.csv` in the script folder, with comma-separated values for
