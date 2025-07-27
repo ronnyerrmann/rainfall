@@ -11,7 +11,7 @@ pip install Image requests opencv-python
 
 Add crontab to run automatically every 8 hours:
 ```
-1 */8 * * * /home/<user>/rainfall/rain_venv/bin/python /home/<user>/rainfall/rainfall_images.py 
+1 */8 * * * /home/<user>/rainfall/rain_venv/bin/python /home/<user>/rainfall/rainfall_images.py
 ```
 
 ### Run
@@ -29,7 +29,7 @@ As the publicly available data only provides ranges from `x` to `2x` mm/h (with 
 
 ### Add your own areas
 This can be done either by creating a file `subareas.csv` in the script folder, with comma-separated values for
-1. (`int`) x-Pixel position in the original file in `image_data`, starting from 0. In the future, that should be derived from lat/lon but for now I used Irfanview to see the pixel position during a click (which is already 0 based). To know which pixel, I looked for rain reaching the position on the metoffice website 
+1. (`int`) x-Pixel position in the original file in `image_data`, starting from 0. In the future, that should be derived from lat/lon but for now I used Irfanview to see the pixel position during a click (which is already 0 based). To know which pixel, I looked for rain reaching the position on the metoffice website.
 2. (`int`) y-Pixel position in the original file in `image_data`.
 3. longitude
 4. latitude
