@@ -1,4 +1,6 @@
-Downloads the metoffice rainfall radar images, summarises them daily, and creates time laps videos for selected areas
+Downloads the metoffice rainfall radar images, summarises them daily, and creates time laps videos for selected areas.\
+If `pdflatex` is installed, it will also create pdf with the daily image for the selected areas to provide a nice overview.
+In the pdfs the centre of the images is marked with a small white dot.
 
 ### Installation/Requirements
 ```
