@@ -267,16 +267,15 @@ class MakePdf:
         return images
 
     def write_end_and_legend(self, f):
-        f.write(r"\end{tabular}\end{figure}" + "\n")
-        f.write(r"\noindent\begin{tikzpicture}[x=1cm, y=1cm]" + "\n")
+        f.write(r"\end{tabular}\end{figure}" + "\n"
+                r"\noindent\begin{tikzpicture}[x=1cm, y=1cm]" + "\n")
         for i, (color, label) in enumerate(self.legend_items):
             if i == len(self.legend_items) - 1:
-                label += " mm/d"
+                label += " mm/d"    # add the physical property to the last lable
             x = i * 1.7
-            f.write(f"""  \\definecolor{{c{i}}}{{RGB}}{{{color[0]}, {color[1]}, {color[2]}}}
-  \\filldraw[fill=c{i}, draw=black] ({x}, 0) rectangle ({x + 0.5}, 0.5);
-  \\node[right] at ({x + 0.6}, 0.25) {{\\small {label}}};
-""")
+            f.write(f"  \\definecolor{{c{i}}}{{RGB}}{{{color[0]}, {color[1]}, {color[2]}}}\n"
+                    f"  \\filldraw[fill=c{i}, draw=black] ({x:.1f}, 0) rectangle ({(x + 0.5):.1f}, 0.5);\n"
+                    f"  \\node[right] at ({(x + 0.6):.1f}, 0.25) {{\\small {label}}};\n")
         f.write(r"\end{tikzpicture}" + "\n")
 
     def create_latex(self):
@@ -296,10 +295,16 @@ class MakePdf:
 \usepackage{tikz}
 \pagestyle{empty}
 
-\newcommand{\subf}[2]{%%
+\newcommand{\subf}[2]{
   {\small\begin{tabular}[t]{@{}c@{}}
   #1\\#2
-  \end{tabular}}%%
+  \end{tabular}}
+}
+\newcommand{\addDot}[1]{
+  \begin{tikzpicture}
+    \node[inner sep=0pt] (img) at (0,0) {#1};
+    \fill[white] (img.center) circle[radius=0.5pt];
+  \end{tikzpicture}
 }
 
 \begin{document}
@@ -317,12 +322,11 @@ class MakePdf:
                             rows = 0
                     if posOnRow == 0 and rows == 0:  # this is a new page
                         # f.write(r"" + name + "\n")    # write place name
-                        f.write(r"""\noindent\begin{figure}[t!]\centering
-\begin{tabular}{%s}
-""" % ("c" * self.framesPerRow))
-                    f.write(r"  \subf{\includegraphics[width=0.12\linewidth]{\detokenize{" + fname + "}}}{" + day + "}" +
-                            ("&" if posOnRow < self.framesPerRow - 1 else "\\\\") + "\n"  # middle or last entry
-                            )
+                        f.write(r"\noindent\begin{figure}[t!]\centering"
+                                r"\begin{tabular}{" + "c" * self.framesPerRow + "}\n")
+                    f.write(r"  \subf{\addDot{\includegraphics[width=0.12\linewidth]{\detokenize{" + fname + r"}}}}" +
+                            "{" + day + "}" +  # subtitle
+                            ("&" if posOnRow < self.framesPerRow - 1 else r"\\") + "\n")  # middle or last entry
                 self.write_end_and_legend(f)
 
                 f.write(r"\end{document}")
