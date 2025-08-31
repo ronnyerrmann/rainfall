@@ -88,6 +88,7 @@ class ProcessImages:
     SUBAREAS.append([2623, 2011, -0.119305, 51.509704, 30, 2, "London"])
     SUBAREAS.append([2363, 2019, -2.585907, 51.458285, 5, 2, "Bristol"])
     SUBAREAS.append([2649, 1915, 0.12291, 52.207607, 5, 2, "Cambridge"])
+    SUBAREAS.append([2300, 1373, -3.188438, 55.950257, 10, 1, "Edinburgh"])
     SUBAREAS.append([2189, 1376, -4.31428, 55.93901, 1, 5, "Milngavie"])
     SUBAREAS.append([2098, 1240, -5.095253, 56.822303, 1, 5, "Fort William"])
     SUBAREAS_FILENAME = os.path.join(SCRIPT_DIR,
@@ -283,7 +284,6 @@ class MakePdf:
         for name, img in images.items():
             texName = f"{name}_{self.texFileNameBase}"
             with open(texName, "w") as f:
-                print(os.path.basename(__file__), name, datetime.now().strftime("%y%m%d%H%M%S"), "")
                 f.write(r"""\pdfinfo{
    /Author (%s)
    /Title  (Daily rainfall for %s)
