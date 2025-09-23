@@ -245,7 +245,7 @@ class ProcessImages:
 class MakePdf:
     texFileNameBase = "rainfall.tex"
     framesPerRow = 7
-    rowsPerPage = 10
+    rowsPerPage = 9
     filename_daily_re = re.compile(r'(.*)_(\d{4}-\d{2}-\d{2})\.png')
     TEX_DIR = os.path.join(SCRIPT_DIR, "tex")
 
