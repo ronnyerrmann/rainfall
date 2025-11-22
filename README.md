@@ -8,7 +8,7 @@ git clone https://github.com/ronnyerrmann/rainfall
 cd rainfall
 python -m venv rain_venv
 . rain_venv/bin/activate
-pip install Image requests opencv-python
+pip install Image requests opencv-python psutil
 ```
 
 Add crontab to run automatically every 8 hours:

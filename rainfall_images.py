@@ -1,14 +1,15 @@
 import csv
+from collections import defaultdict
+import cv2
+from datetime import datetime, timedelta
+import json
+from multiprocessing import Pool
 import os
 import re
 import requests
-import sys
 import numpy as np
-from pathlib import Path
 from PIL import Image
-from datetime import datetime, timedelta
-from collections import defaultdict
-import cv2
+import psutil
 
 # Configuration
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -28,7 +29,18 @@ CONVERSIONS = [
     [9, 96, 85.3, 64, 128, (171, 32, 253), "64-128"],  # 64-128  purple
     [10, 192, 170.6, 128, 999, (255, 255, 255), ">128"],  # >128    white
 ]
+STAT_INFORMATION = os.path.join(SCRIPT_DIR, "statistics.json")
 
+
+def read_image_statistics():
+    stats = {}
+    if os.path.exists(STAT_INFORMATION):
+        try:
+            with open(STAT_INFORMATION, "r") as f:
+                stats = json.load(f)
+        except json.JSONDecodeError as e:
+            print("Invalid JSON:", e)
+    return stats
 
 class DownloadFiles:
     # Configuration
@@ -77,9 +89,14 @@ class DownloadFiles:
 
             current -= delta
 
+def _process_day(args):
+    # to allow multiprocessing to pickle it
+    processImagesInstance, day, day_files = args
+    return processImagesInstance.process_day(day, day_files)
 
 class ProcessImages:
     DAILY_SUM_DIR = os.path.join(SCRIPT_DIR, "image_daily")
+    STAT_INFORMATION = os.path.join(SCRIPT_DIR, "statistics.json")
     VIDEO_DIR = os.path.join(SCRIPT_DIR, "videos")
     # Regex to extract datetime from filename
     filename_re = re.compile(r'(\d{4}-\d{2}-\d{2}T\d{2}\:\d{2}\:00Z)\.png')
@@ -91,8 +108,8 @@ class ProcessImages:
     SUBAREAS.append([2300, 1373, -3.188438, 55.950257, 10, 1, "Edinburgh"])
     SUBAREAS.append([2189, 1376, -4.31428, 55.93901, 1, 5, "Milngavie"])
     SUBAREAS.append([2098, 1240, -5.095253, 56.822303, 1, 5, "Fort William"])
-    SUBAREAS_FILENAME = os.path.join(SCRIPT_DIR,
-                                     "subareas.csv")  # more entries as csv, not included in the python script for privacy reasons
+    SUBAREAS_FILENAME = os.path.join(SCRIPT_DIR, "subareas.csv")    # more entries in a csv file,
+                                                            # not included in the python script for privacy reasons
     SUBAREAS_TYPE = [int, int, float, float, int, int, str]
 
     def __init__(self):
@@ -115,8 +132,14 @@ class ProcessImages:
         self.palette = [0] * len(CONVERSIONS) * 3
         for conversion in CONVERSIONS:
             for i in range(3):
-                self.palette[conversion[0] * 3 + i] = conversion[5][
-                    i]  # palette needs to be in increasing number order, but for my convenience CONVERSIONS are in the order of increasing values
+                self.palette[conversion[0] * 3 + i] = conversion[5][i]  # palette needs to be in increasing number order
+                                            # , but for my convenience CONVERSIONS are in the order of increasing values
+        self.use_cores = psutil.cpu_count(logical=False)    # only use physical cores
+        self.stats = read_image_statistics()
+
+    def write_image_statistics(self):
+        with open(STAT_INFORMATION, "w") as f:
+            f.write(json.dumps(self.stats, indent=2))
 
     @staticmethod
     def parse_datetime(s):
@@ -141,18 +164,23 @@ class ProcessImages:
     def run(self):
         # Organize images by day
         images_by_day = defaultdict(list)
-        images = self.list_day_sum_images()  # already processed images
         for fname in sorted(os.listdir(IMAGE_DIR)):
             match = self.filename_re.match(fname)
             if not match:
                 continue
             dt = self.parse_datetime(match.group(1))
             day = dt.date()
-            if f"{day}_sum.png" not in images.values():
-                images_by_day[day].append((dt, os.path.join(IMAGE_DIR, fname)))
+            images_by_day[day].append((dt, os.path.join(IMAGE_DIR, fname)))
+        for day, data in list(images_by_day.items()):
+            day_str = day.strftime("%Y-%m-%d")
+            if self.stats.get(day_str, 0) == len(data):
+                del images_by_day[day]  # do not reprocess
+            else:
+                self.stats[day_str] = len(data)
         self.process_days(images_by_day)
+        self.write_image_statistics()
 
-        # Create summary video from summed images
+        # Create summary video from summed images and weekly/monthly summaries
         images = self.list_day_sum_images()
         if len(images.keys()):
             self.process_summaries(images)
@@ -160,6 +188,7 @@ class ProcessImages:
         print(f"{datetime.now().time()} Done.")
 
     def list_day_sum_images(self):
+        # Already processed images
         images = {}
         for fname in sorted(os.listdir(self.DAILY_SUM_DIR)):
             match = self.filename_daily_re.match(fname)
@@ -169,56 +198,62 @@ class ProcessImages:
             images[day] = fname
         return images
 
-    def process_days(self, images_by_day):
-        # Process each day
-        for day, day_files in images_by_day.items():
-            print(f"{datetime.now().time()} Processing {day} with {len(day_files)} frames...")
+    def process_day(self, day, day_files):
+        frames = {}
+        accum = None
 
-            frames = {}
-            accum = None
-
-            for i, (dt, path) in enumerate(sorted(day_files)):
-                img = Image.open(path)  # keep as "P" as it's a colour palette. Convert to decimals using .convert("L")
-                arr = np.array(img, dtype=np.uint8)
-                deci_arr = np.zeros_like(arr, dtype=np.float64)
-                for conversion in CONVERSIONS:
-                    deci_arr[arr == conversion[0]] = conversion[2]
-                deci_arr /= 12  # 5min are a 1/12th of an hour to convert mm/hour into mm
-                # print(arr.shape, np.unique(arr,return_counts=True))
-
-                # Sum up images
-                if accum is None:
-                    accum = np.zeros_like(deci_arr, dtype=np.float64)
-                accum += deci_arr
-
-                # Extract subsections
-                for (x, y, _, _, size, _, name) in self.SUBAREAS:
-                    if name not in frames.keys():
-                        frames[name] = np.zeros((len(day_files), 2 * size + 1, 2 * size + 1), dtype=np.uint8)
-                    frames[name][i, :, :] = arr[y - size:y + size + 1, x - size:x + size + 1]
-                    # if name == "Home":
-                    # print(name, frames[name][i,:,:]) # check what needs to be done to the values
-
-            # Save daily summed image as grey-scale mm and with colour palette
-            summed_img = np.clip(accum, 0, 255).astype(np.uint8)
-            Image.fromarray(summed_img).save(f"{self.DAILY_SUM_DIR}/greyscale-mm_{day}_sum.png")
-            # Save daily summed image as with colour palette
-            # accum *= 0.1    # Show the colour scale in cm instead of mm
-            summed_img = np.zeros_like(accum, dtype=np.uint8)
+        for i, (dt, path) in enumerate(sorted(day_files)):
+            img = Image.open(path)  # keep as "P" as it's a colour palette. Convert to decimals using .convert("L")
+            arr = np.array(img, dtype=np.uint8)
+            deci_arr = np.zeros_like(arr, dtype=np.float64)
             for conversion in CONVERSIONS:
-                summed_img[(accum >= conversion[3]) & (accum < conversion[4])] = conversion[0]
-            img = Image.fromarray(summed_img).convert('P')
-            img.putpalette(self.palette)
-            # Mark if it's the current day
-            fname_current_day = f"{self.DAILY_SUM_DIR}/{day}_sum_cur.png"
-            if os.path.exists(fname_current_day):
-                os.remove(fname_current_day)
-            img.save(fname_current_day if day == datetime.utcnow().date() else f"{self.DAILY_SUM_DIR}/{day}_sum.png")
+                deci_arr[arr == conversion[0]] = conversion[2]
+            deci_arr /= 12  # 5min are a 1/12th of an hour to convert mm/hour into mm
+            # print(arr.shape, np.unique(arr,return_counts=True))
 
-            # Write daily videos
-            for name, subframes in frames.items():
-                video_path = f"{self.VIDEO_DIR}/{name.replace(' ', '_')}_{day}.mp4"
-                self.save_video_palette(subframes, video_path, fps=12)  # 1h -> 1s
+            # Sum up images
+            if accum is None:
+                accum = np.zeros_like(deci_arr, dtype=np.float64)
+            accum += deci_arr
+
+            # Extract subsections
+            for (x, y, _, _, size, _, name) in self.SUBAREAS:
+                if name not in frames.keys():
+                    frames[name] = np.zeros((len(day_files), 2 * size + 1, 2 * size + 1), dtype=np.uint8)
+                frames[name][i, :, :] = arr[y - size:y + size + 1, x - size:x + size + 1]
+
+        # Save daily summed image as grey-scale mm and with colour palette
+        summed_img = np.clip(accum, 0, 255).astype(np.uint8)
+        Image.fromarray(summed_img).save(f"{self.DAILY_SUM_DIR}/greyscale-mm_{day}_sum.png")
+        # Save daily summed image as with colour palette
+        # accum *= 0.1    # Show the colour scale in cm instead of mm
+        summed_img = np.zeros_like(accum, dtype=np.uint8)
+        for conversion in CONVERSIONS:
+            summed_img[(accum >= conversion[3]) & (accum < conversion[4])] = conversion[0]
+        img = Image.fromarray(summed_img).convert('P')
+        img.putpalette(self.palette)
+        # Mark if it's the current day
+        fname_current_day = f"{self.DAILY_SUM_DIR}/{day}_sum_cur.png"
+        if os.path.exists(fname_current_day):
+            os.remove(fname_current_day)
+        img.save(fname_current_day if day == datetime.utcnow().date() else f"{self.DAILY_SUM_DIR}/{day}_sum.png")
+
+        # Write daily videos
+        for name, subframes in frames.items():
+            video_path = f"{self.VIDEO_DIR}/{name.replace(' ', '_')}_{day}.mp4"
+            self.save_video_palette(subframes, video_path, fps=12)  # 1h -> 1s
+
+        return {'day': day, 'number_files': len(day_files)}
+
+    def process_days(self, images_by_day):
+        tasks = [(self, day, day_files) for day, day_files in images_by_day.items()]
+        cores = min(self.use_cores, len(tasks))
+        print(f"{datetime.now().time()} Processing {len(tasks)} days on {cores} cores")
+        with Pool(processes=cores) as pool:
+            for result in pool.imap(_process_day, tasks):
+                print(f"{datetime.now().time()} Finished {result['day']} with {result['number_files']} frames...")
+            # results = pool.map(_process_day, tasks)
+            # return results  # only executed the pool now
 
     def process_summaries(self, images):
         print(f"{datetime.now().time()} Processing daily images with {len(images)} frames...")
@@ -253,6 +288,7 @@ class MakePdf:
         os.makedirs(self.TEX_DIR, exist_ok=True)
         os.chdir(self.TEX_DIR)
         self.legend_items = [(conv[5], conv[6].replace("<", "$<$").replace(">", "$>$")) for conv in CONVERSIONS if conv[0] > 0]
+        self.stats = read_image_statistics()
 
     def list_day_sub_images(self):
         images = {}
@@ -324,15 +360,19 @@ class MakePdf:
                         # f.write(r"" + name + "\n")    # write place name
                         f.write(r"\noindent\begin{figure}[t!]\centering"
                                 r"\begin{tabular}{" + "c" * self.framesPerRow + "}\n")
+                    frame_number_text = ""
+                    if self.stats.get(day, 288) != 288:
+                        frame_number_text = f" ({self.stats[day]})"
                     f.write(r"  \subf{\addDot{\includegraphics[width=0.12\linewidth]{\detokenize{" + fname + r"}}}}" +
-                            "{" + day + "}" +  # subtitle
+                            "{" + day + frame_number_text + "}" +  # subtitle
                             ("&" if posOnRow < self.framesPerRow - 1 else r"\\") + "\n")  # middle or last entry
                 self.write_end_and_legend(f)
 
                 f.write(r"\end{document}")
             self.compile_latex(texName)
 
-    def compile_latex(self, texName):
+    @staticmethod
+    def compile_latex(texName):
         os.system(f"pdflatex -interaction=batchmode {texName}")
 
 
