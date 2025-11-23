@@ -62,9 +62,9 @@ The subframes are stored in `subframes_daily/Place_Name_YYYY-MM-DD.png`:
 ![daily summed subframe around Bristol](Documentation/Bristol_2025-09-01.png "Daily summed subframe around Bristol")
 
 Finally, the subframes are added to a pdf document in `tex/Place_Name_rainfall.pdf`.
-A 3-week example for my home is shown below as image and [here is the whole pdf for of Place](Documentation/Bristol_rainfall.pdf).
 In it, bracketed numbers behind the date indicate the number of frames, if not all of the 288 rainfall images could be downloaded from metoffice.
+A 3-week example for my home is shown below as image (showing that it often rains less at home than the in surrounding area) and [here is the whole pdf for of Place](Documentation/Bristol_rainfall.pdf).
 
-![Example excerpt of a pdf](Documentation/Home_rainfall.pdf_selection.png "Example excerpt of a pdf file, showing that it often rains less at home than the in surrounding area)
+![Example excerpt of a pdf](Documentation/Home_rainfall.pdf_selection.png "Example excerpt of a pdf file, showing that it often rains less at home than the in surrounding area")
 
 
