@@ -100,7 +100,7 @@ class ProcessImages:
     VIDEO_DIR = os.path.join(SCRIPT_DIR, "videos")
     # Regex to extract datetime from filename
     filename_re = re.compile(r'(\d{4}-\d{2}-\d{2}T\d{2}\:\d{2}\:00Z)\.png')
-    filename_daily_re = re.compile(r'(\d{4}-\d{2}-\d{2})_sum(_cur)?\.png')
+    filename_daily_re = re.compile(r'(\d{4}-\d{2}-\d{2})_sum\.png')
     SUBAREAS = []  # x, y (irfan, start at 0), lon, lat, px_box_size/2, scale up, name # Todo: calculate px position from lat/lon
     SUBAREAS.append([2623, 2011, -0.119305, 51.509704, 30, 2, "London"])
     SUBAREAS.append([2363, 2019, -2.585907, 51.458285, 5, 2, "Bristol"])
@@ -232,11 +232,7 @@ class ProcessImages:
             summed_img[(accum >= conversion[3]) & (accum < conversion[4])] = conversion[0]
         img = Image.fromarray(summed_img).convert('P')
         img.putpalette(self.palette)
-        # Mark if it's the current day
-        fname_current_day = f"{self.DAILY_SUM_DIR}/{day}_sum_cur.png"
-        if os.path.exists(fname_current_day):
-            os.remove(fname_current_day)
-        img.save(fname_current_day if day == datetime.utcnow().date() else f"{self.DAILY_SUM_DIR}/{day}_sum.png")
+        img.save(f"{self.DAILY_SUM_DIR}/{day}_sum.png")
 
         # Write daily videos
         for name, subframes in frames.items():
