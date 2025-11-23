@@ -22,12 +22,20 @@ rain_venv/bin/python rainfall_images.py
 ```
 All data will be stored in the folder of the script.
 
-As data only a few days back is available, the script should be run at least every 24 hours. For courtesy, do not run it more then once per hour.
+As data only a few days back is available, the script should be run at least every 24 hours. For courtesy, do not run it more than once per hour.
 
 ### Description
-For the daily images the same scale as [metoffice uses in their rainfall radar](https://weather.metoffice.gov.uk/maps-and-charts/rainfall-radar-forecast-map#?model=ukmo-ukv&layer=rainfall-rate) is used, but instead of indicating mm/h it's mm/day. Additionally purple for 64 to 128 and white for 128 to 999 mm/day where added. If more than that value is reached, black will be shown and you should build am arch.
+For the daily images the same scale as [metoffice uses in their rainfall radar](https://weather.metoffice.gov.uk/maps-and-charts/rainfall-radar-forecast-map#?model=ukmo-ukv&layer=rainfall-rate) is used, but instead of indicating mm/h it's mm/day.
+Additionally purple for 64 to 128 and white for 128 to 999 mm/day were added.
+If more than that value is reached, black will be shown, and you should build am arch.
 
-As the publicly available data only provides ranges from `x` to `2x` mm/h (with `x` being the lower rainfall limit for a colour), the resulting summaries for the day can be off by a similar amount. The program uses the value at 33% of the range to reflect the assumed Poisson distribution of rainfall and that the rainfall measurement is done at discrete times. The final values, given in the grey scaled image, have therefore a relative uncertainty of [+50% -25%].
+As the publicly available data only provides ranges from `x` to `2x` mm/h (with `x` being the lower rainfall limit for a colour),
+the resulting summaries for the day can be off by a similar amount.
+The program uses the value at 33% of the range to reflect the assumed Poisson distribution of rainfall and that the rainfall measurement is done at discrete times.
+The final values, given in the grey scaled image, have therefore a relative uncertainty of [+50% -25%].
+
+The metoffice files are timestamped as UTC and this time is used to define a day,
+which means for BST (British Summer Time) the daily images cover 1:00 to 1:00.
 
 ### Add your own areas
 This can be done either by creating a file `subareas.csv` in the script folder, with comma-separated values for
@@ -40,3 +48,23 @@ This can be done either by creating a file `subareas.csv` in the script folder, 
 7. name of the place
 
 Alternatively, the script can be edited to add the lines containing `SUBAREAS.append` with the same entries (name needs to be in quotes)
+
+### Example output
+The full frames of the summed daily images are stored as `image_daily/YYYY-MM-DD_sum.png` (using the same colour coding as metoffice) 
+and `image_daily/greyscale-mm_YYYY-MM-DD_sum.png` (using 8 bit grey-scale):
+
+![daily summed image using the same colour coding as metoffice](Documentation/2025-09-01_sum.png "Daily summed image using the same colour coding as metoffice")
+
+![daily summed image using 8 bit grey-scale](Documentation/greyscale-mm_2025-09-01_sum.png "Daily summed image using 8 bit grey-scale")
+
+The subframes are stored in `subframes_daily/Place_Name_YYYY-MM-DD.png`:
+
+![daily summed subframe around Bristol](Documentation/Bristol_2025-09-01.png "Daily summed subframe around Bristol")
+
+Finally, the subframes are added to a pdf document in `tex/Place_Name_rainfall.pdf`.
+A 3-week example for my home is shown below as image and [here is the whole pdf for of Place](Documentation/Bristol_rainfall.pdf).
+In it, bracketed numbers behind the date indicate the number of frames, if not all of the 288 rainfall images could be downloaded from metoffice.
+
+![Example excerpt of a pdf](Documentation/Home_rainfall.pdf_selection.png "Example excerpt of a pdf file, showing that it often rains less at home than the in surrounding area)
+
+
