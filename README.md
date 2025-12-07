@@ -1,5 +1,5 @@
-Downloads the metoffice rainfall radar images, summarises them daily, and creates time laps videos for selected areas.\
-If `pdflatex` is installed, it will also create pdf with the daily image for the selected areas to provide a nice overview.
+Downloads the metoffice rainfall radar images, summarises them daily, weekly, monthly, and yearly, and creates time laps videos for selected areas.\
+If `pdflatex` is installed, it will also create pdf with the summarised images for the selected areas to provide a nice overview.
 In the pdfs the centre of the images is marked with a small white dot.
 
 ### Installation/Requirements
@@ -57,14 +57,26 @@ and `image_daily/greyscale-mm_YYYY-MM-DD_sum.png` (using 8 bit grey-scale):
 
 ![daily summed image using 8 bit grey-scale](Documentation/greyscale-mm_2025-09-01_sum.png "Daily summed image using 8 bit grey-scale")
 
-The subframes are stored in `subframes_daily/Place_Name_YYYY-MM-DD.png`:
+The full frames of the summed weekly, monthly, and yearly images are stored as `image_weekly_monthly_yearly/[wmy]YYYY-MM-DD_sum.png`
+with `w`, `m`, `y` indicating weekly, monthly, and yearly, respectively.
+The colour coding uses the same colours for the same numeric value ranges as metoffice,
+but values indicate `cm/week`, `cm/month`, and `dm/year` with `1 cm = 10 mm` and `1 dm = 100 mm` (`1 m = 10 dm`).
+The grey scale images are stored in `image_weekly_monthly_yearly/greyscale-<unit>_[wmy]YYYY-MM-DD_sum.png` (8 bit grey-scale),
+using the same units as above: `cm`, `cm`, and `dm`.
+
+The subframes are stored in `subframes_daily/Place_Name_YYYY-MM-DD.png` or `subframes_weekly_monthly_yearly/Place_Name_[wmy]YYYY-MM-DD.png`:
 
 ![daily summed subframe around Bristol](Documentation/Bristol_2025-09-01.png "Daily summed subframe around Bristol")
 
-Finally, the subframes are added to a pdf document in `tex/Place_Name_rainfall.pdf`.
-In it, bracketed numbers behind the date indicate the number of frames, if not all of the 288 rainfall images could be downloaded from metoffice.
-A 3-week example for my home is shown below as image (showing that it often rains less at home than the in surrounding area) and [here is the whole pdf for of Place](Documentation/Bristol_rainfall.pdf).
+Finally, the subframes are added to a pdf document in `tex/Place_Name_rainfall.pdf`, starting with the yearly subframes,
+followed by monthly, weekly, and daily data.
+In it, bracketed numbers behind the date indicate the number of frames,
+if not all the 288 daily or 2016 weekly rainfall images could be downloaded from metoffice.
+For monthly and yearly summaries, the number of frames are always given.
+A 3-week example of the daily and weekly summaries for my home is shown below as image (showing that it often rains less at home than the in surrounding area)
+and [here is the whole pdf for of Place](Documentation/Bristol_rainfall.pdf).
 
-![Example excerpt of a pdf](Documentation/Home_rainfall.pdf_selection.png "Example excerpt of a pdf file, showing that it often rains less at home than the in surrounding area")
+![Example excerpt of a pdf](Documentation/Home_rainfall.pdf_selection.png "Example excerpt of a pdf file, showing the daily section")
+![Example excerpt of a pdf](Documentation/Home_rainfall.pdf_selection_week.png "Example excerpt of a pdf file, showing the weekly section and that it often rains less at home than the in surrounding area")
 
 

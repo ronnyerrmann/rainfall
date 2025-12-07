@@ -15,6 +15,7 @@ import psutil
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 IMAGE_DIR = os.path.join(SCRIPT_DIR, "image_data")
 DAILY_SUB_DIR = os.path.join(SCRIPT_DIR, "subframes_daily")
+WEEKMONTHYEAR_SUB_DIR = os.path.join(SCRIPT_DIR, "subframes_weekly_monthly_yearly")
 CONVERSIONS = [
     # as 'P', avg, 33%ile mm, min mm, max mm, palette from palette = img.getpalette(); print([tuple(palette[i:i+3]) for i in range(0, len(palette), 3)]), legend text
     [0, 0, 0, 0, 0.1, (0, 0, 0)],
@@ -96,11 +97,13 @@ def _process_day(args):
 
 class ProcessImages:
     DAILY_SUM_DIR = os.path.join(SCRIPT_DIR, "image_daily")
+    WEEKMONTHYEAR_SUM_DIR  = os.path.join(SCRIPT_DIR, "image_weekly_monthly_yearly")
     STAT_INFORMATION = os.path.join(SCRIPT_DIR, "statistics.json")
     VIDEO_DIR = os.path.join(SCRIPT_DIR, "videos")
     # Regex to extract datetime from filename
     filename_re = re.compile(r'(\d{4}-\d{2}-\d{2}T\d{2}\:\d{2}\:00Z)\.png')
     filename_daily_re = re.compile(r'(\d{4}-\d{2}-\d{2})_sum\.png')
+    filename_wmy_re = re.compile(r'([wmy]\d{4}-\d{2}-\d{2})_sum\.png')
     SUBAREAS = []  # x, y (irfan, start at 0), lon, lat, px_box_size/2, scale up, name # Todo: calculate px position from lat/lon
     SUBAREAS.append([2623, 2011, -0.119305, 51.509704, 30, 2, "London"])
     SUBAREAS.append([2363, 2019, -2.585907, 51.458285, 5, 2, "Bristol"])
@@ -114,7 +117,9 @@ class ProcessImages:
 
     def __init__(self):
         os.makedirs(self.DAILY_SUM_DIR, exist_ok=True)
+        os.makedirs(self.WEEKMONTHYEAR_SUM_DIR , exist_ok=True)
         os.makedirs(DAILY_SUB_DIR, exist_ok=True)
+        os.makedirs(WEEKMONTHYEAR_SUB_DIR, exist_ok=True)
         os.makedirs(self.VIDEO_DIR, exist_ok=True)
         if os.path.exists(self.SUBAREAS_FILENAME):
             print(f"Will use sub areas from {self.SUBAREAS_FILENAME}")
@@ -178,20 +183,27 @@ class ProcessImages:
             else:
                 self.stats[day_str] = len(data)
         self.process_days(images_by_day)
-        self.write_image_statistics()
 
         # Create summary video from summed images and weekly/monthly summaries
         images = self.list_day_sum_images()
         if len(images.keys()):
-            self.process_summaries(images)
+            self.process_summaries(images, self.DAILY_SUM_DIR, DAILY_SUB_DIR, self.VIDEO_DIR)
+            self.combine_days(images)
+            images_wmy = self.list_sum_images(self.WEEKMONTHYEAR_SUM_DIR, self.filename_wmy_re)
+            self.process_summaries(images_wmy, self.WEEKMONTHYEAR_SUM_DIR, WEEKMONTHYEAR_SUB_DIR)
+        self.write_image_statistics()
 
         print(f"{datetime.now().time()} Done.")
 
     def list_day_sum_images(self):
+        return self.list_sum_images(self.DAILY_SUM_DIR, self.filename_daily_re)
+
+    @staticmethod
+    def list_sum_images(folder, filename_re):
         # Already processed images
         images = {}
-        for fname in sorted(os.listdir(self.DAILY_SUM_DIR)):
-            match = self.filename_daily_re.match(fname)
+        for fname in sorted(os.listdir(folder)):
+            match = filename_re.match(fname)
             if not match:
                 continue
             day = match.group(1)
@@ -223,16 +235,7 @@ class ProcessImages:
                 frames[name][i, :, :] = arr[y - size:y + size + 1, x - size:x + size + 1]
 
         # Save daily summed image as grey-scale mm and with colour palette
-        summed_img = np.clip(accum, 0, 255).astype(np.uint8)
-        Image.fromarray(summed_img).save(f"{self.DAILY_SUM_DIR}/greyscale-mm_{day}_sum.png")
-        # Save daily summed image as with colour palette
-        # accum *= 0.1    # Show the colour scale in cm instead of mm
-        summed_img = np.zeros_like(accum, dtype=np.uint8)
-        for conversion in CONVERSIONS:
-            summed_img[(accum >= conversion[3]) & (accum < conversion[4])] = conversion[0]
-        img = Image.fromarray(summed_img).convert('P')
-        img.putpalette(self.palette)
-        img.save(f"{self.DAILY_SUM_DIR}/{day}_sum.png")
+        self.save_images_palette(accum, self.DAILY_SUM_DIR, day, 'mm')
 
         # Write daily videos
         for name, subframes in frames.items():
@@ -242,6 +245,8 @@ class ProcessImages:
         return {'day': day, 'number_files': len(day_files)}
 
     def process_days(self, images_by_day):
+        if len(images_by_day) == 0:
+            return
         tasks = [(self, day, day_files) for day, day_files in images_by_day.items()]
         cores = min(self.use_cores, len(tasks))
         print(f"{datetime.now().time()} Processing {len(tasks)} days on {cores} cores")
@@ -251,11 +256,53 @@ class ProcessImages:
             # results = pool.map(_process_day, tasks)
             # return results  # only executed the pool now
 
-    def process_summaries(self, images):
-        print(f"{datetime.now().time()} Processing daily images with {len(images)} frames...")
-        frames = {}
+    def save_images_palette(self, image, folder, day, unit):
+        # Save summed image as grey-scale mm and with colour palette
+        summed_img = np.clip(image, 0, 255).astype(np.uint8)
+        Image.fromarray(summed_img).save(f"{folder}/greyscale-{unit}_{day}_sum.png")
+        summed_img = np.zeros_like(image, dtype=np.uint8)
+        for conversion in CONVERSIONS:
+            summed_img[(image >= conversion[3]) & (image < conversion[4])] = conversion[0]
+        img = Image.fromarray(summed_img).convert('P')
+        img.putpalette(self.palette)
+        img.save(f"{folder}/{day}_sum.png")
+
+    def combine_days(self, images):
+        print(f"{datetime.now().time()} Combine daily images with {len(images)} frames...")
+        sum_data = {'week_sum': None, 'week_frames': 0, 'week_start': None,
+                    'month_sum': None, 'month_frames': 0, 'month_start': None,
+                    'year_sum': None, 'year_frames': 0, 'year_start': None}
+        units = {'week': [0.1, 'cm'], 'month': [0.1, 'cm'], 'year': [0.01, 'dm']}
         for i, (day, fname) in enumerate(sorted(images.items())):
-            arr = np.array(Image.open(os.path.join(self.DAILY_SUM_DIR, fname)), dtype=np.uint8)
+            arr_grey = np.array(Image.open(os.path.join(self.DAILY_SUM_DIR, f"greyscale-mm_{fname}")), dtype=np.uint16)
+            day_date = datetime.strptime(day, '%Y-%m-%d')
+            day_week_start = day_date - timedelta(days=day_date.weekday())
+            day_month_start = datetime(day_date.year, day_date.month, 1)
+            day_year_start = datetime(day_date.year, 1, 1)
+            for [dur, day_dur_start] in [['week', day_week_start], ['month', day_month_start], ['year', day_year_start]]:
+                if sum_data[f'{dur}_start'] == day_dur_start:
+                    sum_data[f'{dur}_sum'] += arr_grey
+                    sum_data[f'{dur}_frames'] += self.stats[day]
+                if sum_data[f'{dur}_start'] and (sum_data[f'{dur}_start'] != day_dur_start or i == len(images) - 1):
+                    # save before starting a new week/month, or after last processed image
+                    dur_start_str = dur[0] + sum_data[f'{dur}_start'].strftime('%Y-%m-%d')
+                    self.stats[dur_start_str] = sum_data[f'{dur}_frames']
+                    self.save_images_palette(
+                        sum_data[f'{dur}_sum'] * units[dur][0],
+                        self.WEEKMONTHYEAR_SUM_DIR , dur_start_str, units[dur][1]
+                    )
+                    sum_data[f'{dur}_start'] = None
+                if sum_data[f'{dur}_start'] is None:
+                    sum_data[f'{dur}_start'] = day_dur_start
+                    sum_data[f'{dur}_sum'] = arr_grey
+                    sum_data[f'{dur}_frames'] = self.stats[day]
+
+    def process_summaries(self, images, sum_folder, sub_folder, video_folder = None):
+        print(f"{datetime.now().time()} Processing combined images with {len(images)} frames...")
+        frames = {}
+
+        for i, (day, fname) in enumerate(sorted(images.items())):
+            arr = np.array(Image.open(os.path.join(sum_folder, fname)), dtype=np.uint8)
 
             for (x, y, _, _, size, scale, name) in self.SUBAREAS:
                 arr_sub = arr[y - size:y + size + 1, x - size:x + size + 1]
@@ -266,11 +313,12 @@ class ProcessImages:
                 img = Image.fromarray(arr_sub).convert('P')
                 img = img.resize((arr_sub.shape[1] * scale, arr_sub.shape[0] * scale), resample=Image.NEAREST)
                 img.putpalette(self.palette)
-                img.save(f"{DAILY_SUB_DIR}/{name.replace(' ', '_')}_{day}.png")
+                img.save(f"{sub_folder}/{name.replace(' ', '_')}_{day}.png")
 
-        for name, subframes in frames.items():
-            video_path = f"{self.VIDEO_DIR}/{name.replace(' ', '_')}.mp4"
-            self.save_video_palette(subframes, video_path)
+        if video_folder:
+            for name, subframes in frames.items():
+                video_path = f"{video_folder}/{name.replace(' ', '_')}.mp4"
+                self.save_video_palette(subframes, video_path)
 
 
 class MakePdf:
@@ -278,6 +326,9 @@ class MakePdf:
     framesPerRow = 7
     rowsPerPage = 9
     filename_daily_re = re.compile(r'(.*)_(\d{4}-\d{2}-\d{2})\.png')
+    filename_weekly_re = re.compile(r'(.*)_(w\d{4}-\d{2}-\d{2})\.png')
+    filename_monthly_re = re.compile(r'(.*)_(m\d{4}-\d{2}-\d{2})\.png')
+    filename_yearly_re = re.compile(r'(.*)_(y\d{4}-\d{2}-\d{2})\.png')
     TEX_DIR = os.path.join(SCRIPT_DIR, "tex")
 
     def __init__(self):
@@ -286,34 +337,45 @@ class MakePdf:
         self.legend_items = [(conv[5], conv[6].replace("<", "$<$").replace(">", "$>$")) for conv in CONVERSIONS if conv[0] > 0]
         self.stats = read_image_statistics()
 
-    def list_day_sub_images(self):
+    @staticmethod
+    def list_day_sub_images(folder, filename_re):
         images = {}
-        for fname in sorted(os.listdir(DAILY_SUB_DIR)):
-            match = self.filename_daily_re.match(fname)
+        for fname in sorted(os.listdir(folder)):
+            match = filename_re.match(fname)
             if not match:
                 continue
             name = match.group(1)
             day = match.group(2)
             if name not in images.keys():
                 images[name] = {}
-            images[name][day] = os.path.join(DAILY_SUB_DIR, fname)
+            images[name][day] = os.path.join(folder, fname)
         return images
 
-    def write_end_and_legend(self, f):
-        f.write(r"\end{tabular}\end{figure}" + "\n"
+    def write_end_and_legend(self, f, unit):
+        f.write(r"\end{tabular}\end{figure}" + "\n\n"   # To have the legend below the frames
                 r"\noindent\begin{tikzpicture}[x=1cm, y=1cm]" + "\n")
         for i, (color, label) in enumerate(self.legend_items):
             if i == len(self.legend_items) - 1:
-                label += " mm/d"    # add the physical property to the last lable
+                label += " " + unit    # add the physical property to the last lable
             x = i * 1.7
             f.write(f"  \\definecolor{{c{i}}}{{RGB}}{{{color[0]}, {color[1]}, {color[2]}}}\n"
                     f"  \\filldraw[fill=c{i}, draw=black] ({x:.1f}, 0) rectangle ({(x + 0.5):.1f}, 0.5);\n"
                     f"  \\node[right] at ({(x + 0.6):.1f}, 0.25) {{\\small {label}}};\n")
         f.write(r"\end{tikzpicture}" + "\n")
+        f.write(r"\newpage" + "\n")
 
     def create_latex(self):
-        images = self.list_day_sub_images()
+        images = self.list_day_sub_images(DAILY_SUB_DIR, self.filename_daily_re)
+        images_w = self.list_day_sub_images(WEEKMONTHYEAR_SUB_DIR, self.filename_weekly_re)
+        images_m = self.list_day_sub_images(WEEKMONTHYEAR_SUB_DIR, self.filename_monthly_re)
+        images_y = self.list_day_sub_images(WEEKMONTHYEAR_SUB_DIR, self.filename_yearly_re)
+        data = {}
         for name, img in images.items():
+            data[name] = {'y': {'title': 'Yearly', 'unit': 'dm/yr', 'images': images_y.get(name, {})},
+                          'm': {'title': 'Monthly', 'unit': 'cm/mth', 'images': images_m.get(name, {})},
+                          'w': {'title': 'Weekly', 'unit': 'cm/wk', 'images': images_w.get(name, {})},
+                          'd': {'title': '', 'unit': 'mm/d', 'images': img}}
+        for name, data_ymwd in data.items():
             texName = f"{name}_{self.texFileNameBase}"
             with open(texName, "w") as f:
                 f.write(r"""\pdfinfo{
@@ -328,7 +390,7 @@ class MakePdf:
 \pagestyle{empty}
 
 \newcommand{\subf}[2]{
-  {\small\begin{tabular}[t]{@{}c@{}}
+  {\footnotesize\begin{tabular}[t]{@{}c@{}}
   #1\\#2
   \end{tabular}}
 }
@@ -341,35 +403,38 @@ class MakePdf:
 
 \begin{document}
 """ % (os.path.basename(__file__), name, datetime.now().strftime("%y%m%d%H%M%S")) )
-                rows = 0
-                for i, (day, fname) in enumerate(img.items()):
-                    posOnRow = i % self.framesPerRow
-                    if posOnRow == 0 and i != 0:
-                        # f.write(r"\vspace{0.2cm}\newline" + "\n")  # new row
-                        rows += 1
-                        if rows == self.rowsPerPage:
-                            # new page needed
-                            self.write_end_and_legend(f)
-                            f.write(r"\newpage" + "\n")
-                            rows = 0
-                    if posOnRow == 0 and rows == 0:  # this is a new page
-                        # f.write(r"" + name + "\n")    # write place name
-                        f.write(r"\noindent\begin{figure}[t!]\centering"
-                                r"\begin{tabular}{" + "c" * self.framesPerRow + "}\n")
-                    frame_number_text = ""
-                    if self.stats.get(day, 288) != 288:
-                        frame_number_text = f" ({self.stats[day]})"
-                    f.write(r"  \subf{\addDot{\includegraphics[width=0.12\linewidth]{\detokenize{" + fname + r"}}}}" +
-                            "{" + day + frame_number_text + "}" +  # subtitle
-                            ("&" if posOnRow < self.framesPerRow - 1 else r"\\") + "\n")  # middle or last entry
-                self.write_end_and_legend(f)
+                for j, (ymwd, data_entry) in enumerate(data_ymwd.items()):
+                    if len(data_entry['images']) == 0:
+                        continue
+                    rows = 0
+                    for i, (day, fname) in enumerate(data_entry['images'].items()):
+                        posOnRow = i % self.framesPerRow
+                        if posOnRow == 0 and i != 0:
+                            rows += 1
+                            if rows == self.rowsPerPage:
+                                # new page needed
+                                self.write_end_and_legend(f, data_entry['unit'])
+                                rows = 0
+                        if posOnRow == 0 and rows == 0:  # this is a new page
+                            if data_entry['title']:
+                                f.write(r"\subsubsection*{" + data_entry['title'] + " - " + name + "}\n")
+                                f.write(r"\vspace{-0.7cm}" + "\n")
+                            f.write(r"\noindent\begin{figure}[h!]\centering"
+                                    r"\begin{tabular}{" + "c" * self.framesPerRow + "}\n")
+                        frame_number_text = ""
+                        if ymwd in ['y', 'm'] or (ymwd == 'w' and self.stats.get(day, 2016) != 2016) or (ymwd == 'd' and self.stats.get(day, 288) != 288):
+                            frame_number_text = f" ({self.stats[day]})"
+                        f.write(r"  \subf{\addDot{\includegraphics[width=0.12\linewidth]{\detokenize{" + fname + r"}}}}" +
+                                "{" + day.replace(ymwd,'') + frame_number_text + "}" +  # subtitle
+                                ("&" if posOnRow < self.framesPerRow - 1 else r"\\") + "\n")  # middle or last entry
+                    self.write_end_and_legend(f, data_entry['unit'])
 
                 f.write(r"\end{document}")
             self.compile_latex(texName)
 
     @staticmethod
     def compile_latex(texName):
-        os.system(f"pdflatex -interaction=batchmode {texName}")
+        os.system(f"pdflatex -interaction=batchmode {texName} &")
 
 
 if __name__ == "__main__":

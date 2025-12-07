@@ -3,7 +3,9 @@ subareas.csv
 statistics.json
 image_data
 image_daily/
+image_weekly_monthly_yearly/
 rain_venv/
 subframes_daily/
+subframes_weekly_monthly_yearly/
 videos/
 tex/
