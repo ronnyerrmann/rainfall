@@ -43,7 +43,7 @@ This can be done either by creating a file `subareas.csv` in the script folder, 
 2. (`int`) y-Pixel position in the original file in `image_data`.
 3. longitude
 4. latitude
-5. semi-size of the box around the selected pixel, e.g. 1 leads to a 3x3 array, 10 to 21x21
+5. semi-size of the box around the selected pixel, e.g. 1 leads to a 3x3 array, 10 to 21x21, a pixel being about 0.65 km in size.
 6. scale of a pixel in the final image, e.g. a scale of 5 on a 3x3 array leads to a 15x15 png
 7. name of the place
 
@@ -73,7 +73,9 @@ followed by monthly, weekly, and daily data.
 In it, bracketed numbers behind the date indicate the number of frames,
 if not all the 288 daily or 2016 weekly rainfall images could be downloaded from metoffice.
 For monthly and yearly summaries, the number of frames are always given.
-A 3-week example of the daily and weekly summaries for my home is shown below as image (showing that it often rains less at home than the in surrounding area)
+A 3-week example of the daily and a 3-month example of weekly summaries for my home
+(half box size is 10 pixel so the box spans about 13 km) is shown below as image
+(showing that it often rains less at home than the in surrounding area)
 and [here is the whole pdf for of Place](Documentation/Bristol_rainfall.pdf).
 
 ![Example excerpt of a pdf](Documentation/Home_rainfall.pdf_selection.png "Example excerpt of a pdf file, showing the daily section")

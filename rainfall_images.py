@@ -17,7 +17,8 @@ IMAGE_DIR = os.path.join(SCRIPT_DIR, "image_data")
 DAILY_SUB_DIR = os.path.join(SCRIPT_DIR, "subframes_daily")
 WEEKMONTHYEAR_SUB_DIR = os.path.join(SCRIPT_DIR, "subframes_weekly_monthly_yearly")
 CONVERSIONS = [
-    # as 'P', avg, 33%ile mm, min mm, max mm, palette from palette = img.getpalette(); print([tuple(palette[i:i+3]) for i in range(0, len(palette), 3)]), legend text
+    # as 'P', avg, 33%ile mm, min mm, max mm, palette, legend text
+    # palette from original images: palette = img.getpalette(); print([tuple(palette[i:i+3]) for i in range(0, len(palette), 3)])
     [0, 0, 0, 0, 0.1, (0, 0, 0)],
     [1, 0.3, 0.3, 0.1, 0.5, (0, 0, 254), "<0.5"],  # <0.5    blue
     [4, 0.7, 0.7, 0.5, 1, (50, 101, 254), "0.5-1"],  # 0.5-1   lighter blue
@@ -30,6 +31,17 @@ CONVERSIONS = [
     [9, 96, 85.3, 64, 128, (171, 32, 253), "64-128"],  # 64-128  purple
     [10, 192, 170.6, 128, 999, (255, 255, 255), ">128"],  # >128    white
 ]
+UNITS = {
+    # which summary, multiplicator, unit, unit/time, name (legend)
+    'day'  : {'mult': 1   , 'unit': 'mm', 'unit_time': 'mm/d'  , 'title': '' },
+    'week' : {'mult': 0.1 , 'unit': 'cm', 'unit_time': 'cm/wk' , 'title': 'Weekly'},
+    'month': {'mult': 0.1 , 'unit': 'cm', 'unit_time': 'cm/mth', 'title': 'Monthly'},
+    'year' : {'mult': 0.01, 'unit': 'dm', 'unit_time': 'dm/yr' , 'title': 'Yearly'}
+    # Below values can be used for a dry area to try or to increase contrast in the greyscale images
+    # 'week' : {'mult': 1   , 'unit': 'mm', 'unit_time': 'mm/wk' , 'title': 'Weekly'},
+    # 'month': {'mult': 1   , 'unit': 'mm', 'unit_time': 'mm/mth', 'title': 'Monthly'},
+    # 'year' : {'mult': 0.1 , 'unit': 'cm', 'unit_time': 'cm/yr' , 'title': 'Yearly'}
+}
 STAT_INFORMATION = os.path.join(SCRIPT_DIR, "statistics.json")
 
 
@@ -105,6 +117,7 @@ class ProcessImages:
     filename_daily_re = re.compile(r'(\d{4}-\d{2}-\d{2})_sum\.png')
     filename_wmy_re = re.compile(r'([wmy]\d{4}-\d{2}-\d{2})_sum\.png')
     SUBAREAS = []  # x, y (irfan, start at 0), lon, lat, px_box_size/2, scale up, name # Todo: calculate px position from lat/lon
+    # A pixel is about 0.66 km in size around London and 0.61 km around Edinburgh
     SUBAREAS.append([2623, 2011, -0.119305, 51.509704, 30, 2, "London"])
     SUBAREAS.append([2363, 2019, -2.585907, 51.458285, 5, 2, "Bristol"])
     SUBAREAS.append([2649, 1915, 0.12291, 52.207607, 5, 2, "Cambridge"])
@@ -272,7 +285,6 @@ class ProcessImages:
         sum_data = {'week_sum': None, 'week_frames': 0, 'week_start': None,
                     'month_sum': None, 'month_frames': 0, 'month_start': None,
                     'year_sum': None, 'year_frames': 0, 'year_start': None}
-        units = {'week': [0.1, 'cm'], 'month': [0.1, 'cm'], 'year': [0.01, 'dm']}
         for i, (day, fname) in enumerate(sorted(images.items())):
             arr_grey = np.array(Image.open(os.path.join(self.DAILY_SUM_DIR, f"greyscale-mm_{fname}")), dtype=np.uint16)
             day_date = datetime.strptime(day, '%Y-%m-%d')
@@ -288,8 +300,8 @@ class ProcessImages:
                     dur_start_str = dur[0] + sum_data[f'{dur}_start'].strftime('%Y-%m-%d')
                     self.stats[dur_start_str] = sum_data[f'{dur}_frames']
                     self.save_images_palette(
-                        sum_data[f'{dur}_sum'] * units[dur][0],
-                        self.WEEKMONTHYEAR_SUM_DIR , dur_start_str, units[dur][1]
+                        sum_data[f'{dur}_sum'] * UNITS[dur]['mult'],
+                        self.WEEKMONTHYEAR_SUM_DIR , dur_start_str, UNITS[dur]['unit']
                     )
                     sum_data[f'{dur}_start'] = None
                 if sum_data[f'{dur}_start'] is None:
@@ -371,10 +383,10 @@ class MakePdf:
         images_y = self.list_day_sub_images(WEEKMONTHYEAR_SUB_DIR, self.filename_yearly_re)
         data = {}
         for name, img in images.items():
-            data[name] = {'y': {'title': 'Yearly', 'unit': 'dm/yr', 'images': images_y.get(name, {})},
-                          'm': {'title': 'Monthly', 'unit': 'cm/mth', 'images': images_m.get(name, {})},
-                          'w': {'title': 'Weekly', 'unit': 'cm/wk', 'images': images_w.get(name, {})},
-                          'd': {'title': '', 'unit': 'mm/d', 'images': img}}
+            data[name] = {'year': images_y.get(name, {}),
+                          'month': images_m.get(name, {}),
+                          'week': images_w.get(name, {}),
+                          'day': img}
         for name, data_ymwd in data.items():
             texName = f"{name}_{self.texFileNameBase}"
             with open(texName, "w") as f:
@@ -403,31 +415,31 @@ class MakePdf:
 
 \begin{document}
 """ % (os.path.basename(__file__), name, datetime.now().strftime("%y%m%d%H%M%S")) )
-                for j, (ymwd, data_entry) in enumerate(data_ymwd.items()):
-                    if len(data_entry['images']) == 0:
+                for j, (ymwd, images_ymwd) in enumerate(data_ymwd.items()):
+                    if len(images_ymwd) == 0:
                         continue
                     rows = 0
-                    for i, (day, fname) in enumerate(data_entry['images'].items()):
+                    for i, (day, fname) in enumerate(images_ymwd.items()):
                         posOnRow = i % self.framesPerRow
                         if posOnRow == 0 and i != 0:
                             rows += 1
                             if rows == self.rowsPerPage:
                                 # new page needed
-                                self.write_end_and_legend(f, data_entry['unit'])
+                                self.write_end_and_legend(f, UNITS[ymwd]['unit_time'])
                                 rows = 0
                         if posOnRow == 0 and rows == 0:  # this is a new page
-                            if data_entry['title']:
-                                f.write(r"\subsubsection*{" + data_entry['title'] + " - " + name + "}\n")
+                            if UNITS[ymwd]['title']:
+                                f.write(r"\subsubsection*{" + UNITS[ymwd]['title'] + " - " + name + "}\n")
                                 f.write(r"\vspace{-0.7cm}" + "\n")
                             f.write(r"\noindent\begin{figure}[h!]\centering"
                                     r"\begin{tabular}{" + "c" * self.framesPerRow + "}\n")
                         frame_number_text = ""
-                        if ymwd in ['y', 'm'] or (ymwd == 'w' and self.stats.get(day, 2016) != 2016) or (ymwd == 'd' and self.stats.get(day, 288) != 288):
+                        if ymwd in ['year', 'month'] or (ymwd == 'week' and self.stats.get(day, 2016) != 2016) or (ymwd == 'day' and self.stats.get(day, 288) != 288):
                             frame_number_text = f" ({self.stats[day]})"
                         f.write(r"  \subf{\addDot{\includegraphics[width=0.12\linewidth]{\detokenize{" + fname + r"}}}}" +
-                                "{" + day.replace(ymwd,'') + frame_number_text + "}" +  # subtitle
+                                "{" + day.replace(ymwd[0],'') + frame_number_text + "}" +  # subtitle
                                 ("&" if posOnRow < self.framesPerRow - 1 else r"\\") + "\n")  # middle or last entry
-                    self.write_end_and_legend(f, data_entry['unit'])
+                    self.write_end_and_legend(f, UNITS[ymwd]['unit_time'])
 
                 f.write(r"\end{document}")
             self.compile_latex(texName)
